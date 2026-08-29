@@ -8,7 +8,8 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "dev": "node --import=tsx --env-file-if-exists=.env --watch src/server.ts",
     "build": "npx tsc -p tsconfig.build.json",
     "start": "node dist/server.js",

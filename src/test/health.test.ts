@@ -16,5 +16,10 @@ describe("GET /health", () => {
     const response = await request(app).get("/unknown");
 
     expect(response.status).toBe(404);
+    expect(response.headers["content-type"]).toMatch("application/json;");
+    expect(response.body).toEqual({
+      code: "NOT_FOUND",
+      message: "Route GET /unknown not found",
+    });
   });
 });
