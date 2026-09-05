@@ -6,7 +6,7 @@ const checkConnection = async () => {
        console.log("Database connection successful:", row);
     } catch(error){
         console.error("Database connection failed:", error);
-        process.exit(1);
+        process.exitCode = 1;
     } finally {
         await pool.end();
     }
