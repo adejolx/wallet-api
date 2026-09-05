@@ -13,10 +13,12 @@
     "dev": "node --import=tsx --env-file-if-exists=.env --watch src/server.ts",
     "build": "npx tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
-    "type:check": "npx tsc --noEmit"
+    "type:check": "npx tsc --noEmit",
+    "db:check": "node --import=tsx --env-file-if-exists=.env src/database/check-connection.ts"
   },
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "mysql2": "^3.24.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
