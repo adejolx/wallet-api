@@ -9,4 +9,3 @@ a health endpoint, structured errors, and request-level tests.
 Continue with [Day 2: model the wallet domain](docs/day-02-wallet-domain.md).
 The exercise deliberately supplies constraints, checkpoints, and graduated hints
 instead of a finished implementation.
-
