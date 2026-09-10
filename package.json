@@ -18,8 +18,7 @@
     "lint:fix": "oxlint . --fix",
     "format": "oxfmt .",
     "format:check": "oxfmt . --check",
-    "db:check": "node --import=tsx --env-file-if-exists=.env src/database/check-connection.ts",
-    "db:wallet": "node --import=tsx --env-file-if-exists=.env src/modules/wallet/check-wallet-repository.ts"
+    "db:check": "node --import=tsx --env-file-if-exists=.env src/database/check-connection.ts"
   },
   "dependencies": {
     "express": "^5.2.1",
