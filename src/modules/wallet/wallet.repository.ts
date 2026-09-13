@@ -1,28 +1,38 @@
-import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
-
-interface WalletRow extends RowDataPacket {
-  id: number;
-  user_id: number;
-  currency: string;
-  balance_minor: number;
-  created_at: Date;
-  updated_at: Date;
-}
+import type { Pool, PoolConnection, ResultSetHeader } from "mysql2/promise";
+import type { WalletRow } from "./wallet.types.js";
 
 export class WalletRepository {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly db: Pool | PoolConnection) {}
 
   async findByUserId(userId: number): Promise<WalletRow | null> {
     if (!Number.isSafeInteger(userId) || userId <= 0)
       throw new Error("user id must be a positive integer number");
-    const [rows] = await this.pool.execute<WalletRow[]>(
-      `SELECT id, 
-        user_id, 
-        currency, 
-        balance_minor, 
-        created_at, 
-        updated_at 
+    const [rows] = await this.db.execute<WalletRow[]>(
+      `SELECT id,
+        user_id,
+        currency,
+        balance_minor,
+        created_at,
+        updated_at
         FROM wallets WHERE user_id = ?`,
+      [userId],
+    );
+    const [row] = rows;
+    return row ?? null;
+  }
+
+  async findByUserIdForUpdate(userId: number): Promise<WalletRow | null> {
+    if (!Number.isSafeInteger(userId) || userId <= 0)
+      throw new Error("user id must be a positive integer number");
+    const [rows] = await this.db.execute<WalletRow[]>(
+      `SELECT id,
+        user_id,
+        currency,
+        balance_minor,
+        created_at,
+        updated_at
+        FROM wallets WHERE user_id = ?
+        FOR UPDATE`,
       [userId],
     );
     const [row] = rows;
@@ -35,12 +45,12 @@ export class WalletRepository {
     if (!/^[A-Za-z]{3}$/.test(currency))
       throw new Error("a valid 3 letter currency is required");
     const normalizedCurrency = currency.toUpperCase();
-    const [result] = await this.pool.execute<ResultSetHeader>(
+    const [result] = await this.db.execute<ResultSetHeader>(
       `INSERT INTO wallets (user_id, currency) VALUES (?, ?)`,
       [userId, normalizedCurrency],
     );
 
-    const [rows] = await this.pool.execute<WalletRow[]>(
+    const [rows] = await this.db.execute<WalletRow[]>(
       `SELECT id, user_id, currency, balance_minor, created_at, updated_at FROM wallets WHERE id = ?`,
       [result.insertId],
     );
@@ -58,9 +68,9 @@ export class WalletRepository {
       throw new Error("balance must be a non-negative safe integer");
     }
 
-    const [result] = await this.pool.execute<ResultSetHeader>(
-      `UPDATE wallets 
-        SET balance_minor = ? 
+    const [result] = await this.db.execute<ResultSetHeader>(
+      `UPDATE wallets
+        SET balance_minor = ?
         WHERE id = ?`,
       [balanceMinor, walletId],
     );
@@ -69,7 +79,7 @@ export class WalletRepository {
       return null;
     }
 
-    const [rows] = await this.pool.execute<WalletRow[]>(
+    const [rows] = await this.db.execute<WalletRow[]>(
       `SELECT id, user_id, currency, balance_minor, created_at, updated_at FROM wallets WHERE id = ?`,
       [walletId],
     );
