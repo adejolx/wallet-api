@@ -8,3 +8,12 @@ export interface WalletRow extends RowDataPacket {
   created_at: Date;
   updated_at: Date;
 }
+
+export interface TransactionRow extends RowDataPacket {
+  id: number;
+  sender_wallet: number;
+  recipient_wallet: string;
+  amount_minor: number;
+  created_at: Date;
+  currency: string;
+}
