@@ -275,4 +275,27 @@ describe("Wallet service integration", () => {
       initialBalance + transferAmountToRecipient - transferAmountToSender,
     );
   });
+
+  it.only("should process identical transfer requests twice when no idempotency protection exists", async () => {
+    const currency = "NGN";
+    const initialBalance = 150_000;
+    const transferAmount = 2_000;
+
+    const sender1Wallet = await repository.create(sender1UserId, currency);
+    await repository.updateBalance(sender1Wallet.id, initialBalance);
+
+    const recipient1Wallet = await repository.create(recipient1UserId, currency);
+    createdWallets.push(sender1Wallet.id, recipient1Wallet.id);
+
+    const service = new WalletService(pool);
+
+    await service.transfer(sender1UserId, recipient1UserId, transferAmount);
+    await service.transfer(sender1UserId, recipient1UserId, transferAmount);
+
+    const sender1WalletAfter = await repository.findByUserId(sender1UserId);
+    const recipient1WalletAfter = await repository.findByUserId(recipient1UserId);
+
+    expect(sender1WalletAfter?.balance_minor).toBe(initialBalance - 2 * transferAmount);
+    expect(recipient1WalletAfter?.balance_minor).toBe(2 * transferAmount);
+  });
 });
