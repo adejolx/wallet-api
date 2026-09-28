@@ -9,8 +9,9 @@ CREATE TABLE idempotency_keys (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT uq_idempotency_key UNIQUE (idempotency_key),
-    CONSTRAINT fk_sender_wallet_id FOREIGN KEY (sender_wallet_id) REFERENCES wallets (id), 
-    CONSTRAINT fk_recipient_wallet_id FOREIGN KEY (recipient_wallet_id) REFERENCES wallets (id), 
-    CONSTRAINT fk_transaction_id FOREIGN KEY (transaction_id) REFERENCES transactions (id),
-    CONSTRAINT chk_amount_minor_positive CHECK (amount_minor > 0)
+    CONSTRAINT fk_idempotency_sender_wallet_id FOREIGN KEY (sender_wallet_id) REFERENCES wallets (id),
+    CONSTRAINT fk_idempotency_recipient_wallet_id FOREIGN KEY (recipient_wallet_id) REFERENCES wallets (id),
+    CONSTRAINT fk_idempotency_transaction_id FOREIGN KEY (transaction_id) REFERENCES transactions (id),
+    CONSTRAINT chk_idempotency_currency_length CHECK (CHAR_LENGTH(currency) = 3),
+    CONSTRAINT chk_idempotency_amount_minor_positive CHECK (amount_minor > 0)
 ) ENGINE=InnoDB;

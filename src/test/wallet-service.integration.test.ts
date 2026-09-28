@@ -3,7 +3,10 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { WalletRepository } from "../modules/wallet/wallet.repository.js";
 import { pool } from "../database/pool.js";
 import { WalletService } from "../modules/wallet/wallet.service.js";
-import type { TransactionRow } from "../modules/wallet/wallet.types.js";
+import type {
+  IdempotencyKeysRow,
+  TransactionRow,
+} from "../modules/wallet/wallet.types.js";
 
 type UserRow = RowDataPacket & { id: number; email: string };
 
@@ -48,6 +51,11 @@ describe("Wallet service integration", () => {
       const placeholders = createdWallets.map(() => "?").join(",");
 
       await pool.execute(
+        `DELETE FROM idempotency_keys WHERE sender_wallet_id IN (${placeholders}) OR recipient_wallet_id IN (${placeholders})`,
+        [...createdWallets, ...createdWallets],
+      );
+
+      await pool.execute(
         `DELETE FROM transactions
         WHERE sender_wallet IN (${placeholders}) OR recipient_wallet IN (${placeholders})`,
         [...createdWallets, ...createdWallets],
@@ -83,7 +91,12 @@ describe("Wallet service integration", () => {
     await repository.updateBalance(senderWallet.id, senderInitBalance);
 
     const service = new WalletService(pool);
-    await service.transfer(sender1UserId, recipient1UserId, transferAmount);
+    await service.transfer(
+      sender1UserId,
+      recipient1UserId,
+      transferAmount,
+      "transfer-1",
+    );
     const [rows] = await pool.execute<TransactionRow[]>(
       `SELECT sender_wallet, recipient_wallet, amount_minor, currency FROM transactions WHERE sender_wallet = ? AND recipient_wallet = ?`,
       [senderWallet.id, recipientWallet.id],
@@ -121,8 +134,18 @@ describe("Wallet service integration", () => {
     const trxnService2 = new WalletService(pool);
 
     await Promise.all([
-      trxnService1.transfer(sender1UserId, recipient1UserId, transferAmount),
-      trxnService2.transfer(sender1UserId, recipient2UserId, transferAmount),
+      trxnService1.transfer(
+        sender1UserId,
+        recipient1UserId,
+        transferAmount,
+        "transfer-1",
+      ),
+      trxnService2.transfer(
+        sender1UserId,
+        recipient2UserId,
+        transferAmount,
+        "transfer-2",
+      ),
     ]);
 
     const senderWalletAfterTransfer = await repository.findByUserId(sender1UserId);
@@ -163,7 +186,7 @@ describe("Wallet service integration", () => {
     });
 
     await expect(
-      service.transfer(sender1UserId, recipient1UserId, transferAmount),
+      service.transfer(sender1UserId, recipient1UserId, transferAmount, "transfer-1"),
     ).rejects.toThrow(errorMsg);
 
     const sender = await repository.findByUserId(sender1UserId);
@@ -198,20 +221,27 @@ describe("Wallet service integration", () => {
     });
 
     await expect(
-      service.transfer(sender1UserId, recipient1UserId, transferAmount),
+      service.transfer(sender1UserId, recipient1UserId, transferAmount, "transfer-1"),
     ).rejects.toThrow(errorMsg);
 
-    const [rows] = await pool.execute<TransactionRow[]>(
+    const [transactionRows] = await pool.execute<TransactionRow[]>(
       `SELECT sender_wallet, recipient_wallet, amount_minor, currency FROM transactions WHERE sender_wallet = ? AND recipient_wallet = ?`,
       [senderWallet.id, recipient1Wallet.id],
     );
-    expect(rows).toHaveLength(0);
+    expect(transactionRows).toHaveLength(0);
 
     const sender = await repository.findByUserId(sender1UserId);
     const recipient = await repository.findByUserId(recipient1UserId);
 
     expect(sender?.balance_minor).toBe(senderBalance);
     expect(recipient?.balance_minor).toBe(0);
+
+    const [idempotencyRows] = await pool.execute<IdempotencyKeysRow[]>(
+      `SELECT * FROM idempotency_keys where idempotency_key = ?`,
+      ["transfer-1"],
+    );
+
+    expect(idempotencyRows).toHaveLength(0);
   });
 
   it("should handle concurrent receives correctly", async () => {
@@ -230,8 +260,8 @@ describe("Wallet service integration", () => {
     const service2 = new WalletService(pool);
 
     await Promise.all([
-      service1.transfer(sender1UserId, recipient1UserId, transferAmount),
-      service2.transfer(sender2UserId, recipient1UserId, transferAmount),
+      service1.transfer(sender1UserId, recipient1UserId, transferAmount, "transfer-1"),
+      service2.transfer(sender2UserId, recipient1UserId, transferAmount, "transfer-2"),
     ]);
 
     const sender1WalletAfter = await repository.findByUserId(sender1UserId);
@@ -261,8 +291,18 @@ describe("Wallet service integration", () => {
     const service2 = new WalletService(pool);
 
     await Promise.all([
-      service1.transfer(sender1UserId, recipient1UserId, transferAmountToRecipient),
-      service2.transfer(recipient1UserId, sender1UserId, transferAmountToSender),
+      service1.transfer(
+        sender1UserId,
+        recipient1UserId,
+        transferAmountToRecipient,
+        "transfer-1",
+      ),
+      service2.transfer(
+        recipient1UserId,
+        sender1UserId,
+        transferAmountToSender,
+        "transfer-2",
+      ),
     ]);
 
     const sender1UserWalletAfter = await repository.findByUserId(sender1UserId);
@@ -276,7 +316,7 @@ describe("Wallet service integration", () => {
     );
   });
 
-  it.only("should process identical transfer requests twice when no idempotency protection exists", async () => {
+  it("should not process identical transfer requests twice when idempotency protection exists", async () => {
     const currency = "NGN";
     const initialBalance = 150_000;
     const transferAmount = 2_000;
@@ -289,13 +329,171 @@ describe("Wallet service integration", () => {
 
     const service = new WalletService(pool);
 
-    await service.transfer(sender1UserId, recipient1UserId, transferAmount);
-    await service.transfer(sender1UserId, recipient1UserId, transferAmount);
+    await service.transfer(
+      sender1UserId,
+      recipient1UserId,
+      transferAmount,
+      "duplicate-transfer",
+    );
+    await service.transfer(
+      sender1UserId,
+      recipient1UserId,
+      transferAmount,
+      "duplicate-transfer",
+    );
 
     const sender1WalletAfter = await repository.findByUserId(sender1UserId);
     const recipient1WalletAfter = await repository.findByUserId(recipient1UserId);
 
-    expect(sender1WalletAfter?.balance_minor).toBe(initialBalance - 2 * transferAmount);
-    expect(recipient1WalletAfter?.balance_minor).toBe(2 * transferAmount);
+    expect(sender1WalletAfter?.balance_minor).toBe(initialBalance - transferAmount);
+    expect(recipient1WalletAfter?.balance_minor).toBe(transferAmount);
+  });
+
+  it("should reject an idempotency key reused for a different transfer", async () => {
+    const currency = "NGN";
+    const initialBalance = 150_000;
+    const transferAmount = 2_000;
+
+    const sender1Wallet = await repository.create(sender1UserId, currency);
+    await repository.updateBalance(sender1Wallet.id, initialBalance);
+
+    const recipient1Wallet = await repository.create(recipient1UserId, currency);
+    const recipient2Wallet = await repository.create(recipient2UserId, currency);
+    createdWallets.push(sender1Wallet.id, recipient1Wallet.id, recipient2Wallet.id);
+
+    const service = new WalletService(pool);
+
+    await service.transfer(
+      sender1UserId,
+      recipient1UserId,
+      transferAmount,
+      "duplicate-transfer",
+    );
+
+    await expect(
+      service.transfer(
+        sender1UserId,
+        recipient2UserId,
+        transferAmount,
+        "duplicate-transfer",
+      ),
+    ).rejects.toThrow("idempotency key was already used for a different request");
+
+    const sender1WalletAfter = await repository.findByUserId(sender1UserId);
+    const recipient1WalletAfter = await repository.findByUserId(recipient1UserId);
+    const recipient2WalletAfter = await repository.findByUserId(recipient2UserId);
+
+    expect(sender1WalletAfter?.balance_minor).toBe(initialBalance - transferAmount);
+    expect(recipient1WalletAfter?.balance_minor).toBe(transferAmount);
+    expect(recipient2WalletAfter?.balance_minor).toBe(0);
+  });
+
+  it("should process concurrent identical requests only once", async () => {
+    const currency = "NGN";
+    const initialBalance = 150_000;
+    const transferAmount = 2_000;
+
+    const sender1Wallet = await repository.create(sender1UserId, currency);
+    await repository.updateBalance(sender1Wallet.id, initialBalance);
+
+    const recipient1Wallet = await repository.create(recipient1UserId, currency);
+    createdWallets.push(sender1Wallet.id, recipient1Wallet.id);
+
+    const service = new WalletService(pool);
+
+    await Promise.all([
+      service.transfer(
+        sender1UserId,
+        recipient1UserId,
+        transferAmount,
+        "duplicate-transfer",
+      ),
+      service.transfer(
+        sender1UserId,
+        recipient1UserId,
+        transferAmount,
+        "duplicate-transfer",
+      ),
+    ]);
+
+    const sender1WalletAfter = await repository.findByUserId(sender1UserId);
+    const recipient1WalletAfter = await repository.findByUserId(recipient1UserId);
+
+    expect(sender1WalletAfter?.balance_minor).toBe(initialBalance - transferAmount);
+    expect(recipient1WalletAfter?.balance_minor).toBe(transferAmount);
+
+    const [rows] = await pool.execute(
+      `SELECT * FROM transactions WHERE sender_wallet = ? AND recipient_wallet = ?`,
+      [sender1Wallet.id, recipient1Wallet.id],
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("should process concurrent different requests only once", async () => {
+    const currency = "NGN";
+    const initialBalance = 150_000;
+    const transferAmount = 2_000;
+
+    const sender1Wallet = await repository.create(sender1UserId, currency);
+    const sender2Wallet = await repository.create(sender2UserId, currency);
+    await repository.updateBalance(sender1Wallet.id, initialBalance);
+    await repository.updateBalance(sender2Wallet.id, initialBalance);
+
+    const recipient1Wallet = await repository.create(recipient1UserId, currency);
+    const recipient2Wallet = await repository.create(recipient2UserId, currency);
+    createdWallets.push(
+      sender1Wallet.id,
+      sender2Wallet.id,
+      recipient1Wallet.id,
+      recipient2Wallet.id,
+    );
+
+    const service = new WalletService(pool);
+
+    const results = await Promise.allSettled([
+      service.transfer(
+        sender1UserId,
+        recipient1UserId,
+        transferAmount,
+        "duplicate-transfer",
+      ),
+      service.transfer(
+        sender2UserId,
+        recipient2UserId,
+        transferAmount,
+        "duplicate-transfer",
+      ),
+    ]);
+    const fulfilled = results.filter((result) => result.status === "fulfilled");
+    const rejected = results.filter((result) => result.status === "rejected");
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+
+    const sender1WalletAfter = await repository.findByUserId(sender1UserId);
+    const sender2WalletAfter = await repository.findByUserId(sender2UserId);
+    const recipient1WalletAfter = await repository.findByUserId(recipient1UserId);
+    const recipient2WalletAfter = await repository.findByUserId(recipient2UserId);
+
+    if (results[0]?.status === "fulfilled") {
+      expect(sender1WalletAfter?.balance_minor).toBe(initialBalance - transferAmount);
+      expect(recipient1WalletAfter?.balance_minor).toBe(transferAmount);
+
+      expect(sender2WalletAfter?.balance_minor).toBe(initialBalance);
+      expect(recipient2WalletAfter?.balance_minor).toBe(0);
+    } else {
+      expect(sender1WalletAfter?.balance_minor).toBe(initialBalance);
+      expect(recipient1WalletAfter?.balance_minor).toBe(0);
+
+      expect(sender2WalletAfter?.balance_minor).toBe(initialBalance - transferAmount);
+      expect(recipient2WalletAfter?.balance_minor).toBe(transferAmount);
+    }
+
+    const [rows] = await pool.execute(
+      `SELECT * FROM transactions WHERE sender_wallet IN (?, ?) AND recipient_wallet IN (?, ?)`,
+      [sender1Wallet.id, sender2Wallet.id, recipient2Wallet.id, recipient1Wallet.id],
+    );
+
+    expect(rows).toHaveLength(1);
   });
 });

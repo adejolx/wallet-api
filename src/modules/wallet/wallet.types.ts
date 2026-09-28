@@ -17,3 +17,14 @@ export interface TransactionRow extends RowDataPacket {
   created_at: Date;
   currency: string;
 }
+
+export interface IdempotencyKeysRow extends RowDataPacket {
+  id: number;
+  idempotency_key: string;
+  sender_wallet_id: number;
+  recipient_wallet_id: number;
+  amount_minor: number;
+  currency: string;
+  transaction_id: number;
+  created_at: Date;
+}

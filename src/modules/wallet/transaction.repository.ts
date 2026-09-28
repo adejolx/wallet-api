@@ -28,12 +28,14 @@ export class TransactionRepository {
     );
 
     const [rows] = await this.connection.execute<TransactionRow[]>(
-      `SELECT sender_wallet, recipient_wallet, amount_minor, currency FROM transactions WHERE id = ?`,
+      `SELECT id, sender_wallet, recipient_wallet, amount_minor, currency FROM transactions WHERE id = ?`,
       [result.insertId],
     );
 
     const [row] = rows;
 
-    return row ?? null;
+    if (!row) throw new Error("Transaction cannot be retrieved");
+
+    return row;
   }
 }
