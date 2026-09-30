@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { Wallet } from "../modules/wallet/wallet.domain.js";
 
 describe("Wallet", () => {

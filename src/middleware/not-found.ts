@@ -1,4 +1,5 @@
-import type { Request, Response, NextFunction } from "express";
+import type { NextFunction, Request, Response } from "express";
+
 import { NotFoundError } from "../errors/not-found-error.js";
 
 export function notFound(req: Request, _res: Response, next: NextFunction) {

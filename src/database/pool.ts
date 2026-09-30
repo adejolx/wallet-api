@@ -1,4 +1,5 @@
 import { createPool } from "mysql2/promise";
+
 import { parsePort } from "../config.js";
 
 const port = parsePort(process.env.DB_PORT || "3306");

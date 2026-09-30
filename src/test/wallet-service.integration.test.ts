@@ -1,12 +1,14 @@
-import { type RowDataPacket, type ResultSetHeader } from "mysql2";
+import { type ResultSetHeader, type RowDataPacket } from "mysql2";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WalletRepository } from "../modules/wallet/wallet.repository.js";
-import { pool } from "../database/pool.js";
-import { WalletService } from "../modules/wallet/wallet.service.js";
+
 import type {
   IdempotencyKeysRow,
   TransactionRow,
 } from "../modules/wallet/wallet.types.js";
+
+import { pool } from "../database/pool.js";
+import { WalletRepository } from "../modules/wallet/wallet.repository.js";
+import { WalletService } from "../modules/wallet/wallet.service.js";
 
 type UserRow = RowDataPacket & { id: number; email: string };
 

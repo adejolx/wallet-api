@@ -1,9 +1,10 @@
 import express, { type Express } from "express";
-import { notFound } from "./middleware/not-found.js";
+
+import { pool } from "./database/pool.js";
 import { errorHandler } from "./middleware/error-handler.js";
+import { notFound } from "./middleware/not-found.js";
 import { createWalletRouter } from "./modules/wallet/wallet.controller.js";
 import { WalletService } from "./modules/wallet/wallet.service.js";
-import { pool } from "./database/pool.js";
 
 const app: Express = express();
 

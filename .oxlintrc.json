@@ -4,7 +4,9 @@
   "categories": {
     "correctness": "error"
   },
-  "rules": {},
+  "rules": {
+    "sort-imports": "off"
+  },
   "env": {
     "builtin": true
   },

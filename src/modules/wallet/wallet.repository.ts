@@ -1,4 +1,5 @@
 import type { Pool, PoolConnection, ResultSetHeader } from "mysql2/promise";
+
 import type { WalletRow } from "./wallet.types.js";
 
 export class WalletRepository {

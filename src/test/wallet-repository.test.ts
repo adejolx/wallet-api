@@ -1,7 +1,9 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ResultSetHeader } from "mysql2/promise";
-import { WalletRepository } from "../modules/wallet/wallet.repository.js";
+
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import { pool } from "../database/pool.js";
+import { WalletRepository } from "../modules/wallet/wallet.repository.js";
 
 describe("WalletRepository", () => {
   const repository = new WalletRepository(pool);
