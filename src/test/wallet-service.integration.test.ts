@@ -91,12 +91,12 @@ describe("Wallet service integration", () => {
     await repository.updateBalance(senderWallet.id, senderInitBalance);
 
     const service = new WalletService(pool);
-    await service.transfer(
-      sender1UserId,
-      recipient1UserId,
-      transferAmount,
-      "transfer-1",
-    );
+    await service.transfer({
+      senderUserId: sender1UserId,
+      recipientUserId: recipient1UserId,
+      amountMinor: transferAmount,
+      idempotencyKey: "transfer-1",
+    });
     const [rows] = await pool.execute<TransactionRow[]>(
       `SELECT sender_wallet, recipient_wallet, amount_minor, currency FROM transactions WHERE sender_wallet = ? AND recipient_wallet = ?`,
       [senderWallet.id, recipientWallet.id],
@@ -134,18 +134,18 @@ describe("Wallet service integration", () => {
     const trxnService2 = new WalletService(pool);
 
     await Promise.all([
-      trxnService1.transfer(
-        sender1UserId,
-        recipient1UserId,
-        transferAmount,
-        "transfer-1",
-      ),
-      trxnService2.transfer(
-        sender1UserId,
-        recipient2UserId,
-        transferAmount,
-        "transfer-2",
-      ),
+      trxnService1.transfer({
+        senderUserId: sender1UserId,
+        recipientUserId: recipient1UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "transfer-1",
+      }),
+      trxnService2.transfer({
+        senderUserId: sender1UserId,
+        recipientUserId: recipient2UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "transfer-2",
+      }),
     ]);
 
     const senderWalletAfterTransfer = await repository.findByUserId(sender1UserId);
@@ -186,7 +186,12 @@ describe("Wallet service integration", () => {
     });
 
     await expect(
-      service.transfer(sender1UserId, recipient1UserId, transferAmount, "transfer-1"),
+      service.transfer({
+        senderUserId: sender1UserId,
+        recipientUserId: recipient1UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "transfer-1",
+      }),
     ).rejects.toThrow(errorMsg);
 
     const sender = await repository.findByUserId(sender1UserId);
@@ -221,7 +226,12 @@ describe("Wallet service integration", () => {
     });
 
     await expect(
-      service.transfer(sender1UserId, recipient1UserId, transferAmount, "transfer-1"),
+      service.transfer({
+        senderUserId: sender1UserId,
+        recipientUserId: recipient1UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "transfer-1",
+      }),
     ).rejects.toThrow(errorMsg);
 
     const [transactionRows] = await pool.execute<TransactionRow[]>(
@@ -260,8 +270,18 @@ describe("Wallet service integration", () => {
     const service2 = new WalletService(pool);
 
     await Promise.all([
-      service1.transfer(sender1UserId, recipient1UserId, transferAmount, "transfer-1"),
-      service2.transfer(sender2UserId, recipient1UserId, transferAmount, "transfer-2"),
+      service1.transfer({
+        senderUserId: sender1UserId,
+        recipientUserId: recipient1UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "transfer-1",
+      }),
+      service2.transfer({
+        senderUserId: sender2UserId,
+        recipientUserId: recipient1UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "transfer-2",
+      }),
     ]);
 
     const sender1WalletAfter = await repository.findByUserId(sender1UserId);
@@ -291,18 +311,18 @@ describe("Wallet service integration", () => {
     const service2 = new WalletService(pool);
 
     await Promise.all([
-      service1.transfer(
-        sender1UserId,
-        recipient1UserId,
-        transferAmountToRecipient,
-        "transfer-1",
-      ),
-      service2.transfer(
-        recipient1UserId,
-        sender1UserId,
-        transferAmountToSender,
-        "transfer-2",
-      ),
+      service1.transfer({
+        senderUserId: sender1UserId,
+        recipientUserId: recipient1UserId,
+        amountMinor: transferAmountToRecipient,
+        idempotencyKey: "transfer-1",
+      }),
+      service2.transfer({
+        senderUserId: recipient1UserId,
+        recipientUserId: sender1UserId,
+        amountMinor: transferAmountToSender,
+        idempotencyKey: "transfer-2",
+      }),
     ]);
 
     const sender1UserWalletAfter = await repository.findByUserId(sender1UserId);
@@ -329,18 +349,18 @@ describe("Wallet service integration", () => {
 
     const service = new WalletService(pool);
 
-    await service.transfer(
-      sender1UserId,
-      recipient1UserId,
-      transferAmount,
-      "duplicate-transfer",
-    );
-    await service.transfer(
-      sender1UserId,
-      recipient1UserId,
-      transferAmount,
-      "duplicate-transfer",
-    );
+    await service.transfer({
+      senderUserId: sender1UserId,
+      recipientUserId: recipient1UserId,
+      amountMinor: transferAmount,
+      idempotencyKey: "duplicate-transfer",
+    });
+    await service.transfer({
+      senderUserId: sender1UserId,
+      recipientUserId: recipient1UserId,
+      amountMinor: transferAmount,
+      idempotencyKey: "duplicate-transfer",
+    });
 
     const sender1WalletAfter = await repository.findByUserId(sender1UserId);
     const recipient1WalletAfter = await repository.findByUserId(recipient1UserId);
@@ -363,20 +383,20 @@ describe("Wallet service integration", () => {
 
     const service = new WalletService(pool);
 
-    await service.transfer(
-      sender1UserId,
-      recipient1UserId,
-      transferAmount,
-      "duplicate-transfer",
-    );
+    await service.transfer({
+      senderUserId: sender1UserId,
+      recipientUserId: recipient1UserId,
+      amountMinor: transferAmount,
+      idempotencyKey: "duplicate-transfer",
+    });
 
     await expect(
-      service.transfer(
-        sender1UserId,
-        recipient2UserId,
-        transferAmount,
-        "duplicate-transfer",
-      ),
+      service.transfer({
+        senderUserId: sender1UserId,
+        recipientUserId: recipient2UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "duplicate-transfer",
+      }),
     ).rejects.toThrow("idempotency key was already used for a different request");
 
     const sender1WalletAfter = await repository.findByUserId(sender1UserId);
@@ -402,18 +422,18 @@ describe("Wallet service integration", () => {
     const service = new WalletService(pool);
 
     await Promise.all([
-      service.transfer(
-        sender1UserId,
-        recipient1UserId,
-        transferAmount,
-        "duplicate-transfer",
-      ),
-      service.transfer(
-        sender1UserId,
-        recipient1UserId,
-        transferAmount,
-        "duplicate-transfer",
-      ),
+      service.transfer({
+        senderUserId: sender1UserId,
+        recipientUserId: recipient1UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "duplicate-transfer",
+      }),
+      service.transfer({
+        senderUserId: sender1UserId,
+        recipientUserId: recipient1UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "duplicate-transfer",
+      }),
     ]);
 
     const sender1WalletAfter = await repository.findByUserId(sender1UserId);
@@ -451,18 +471,18 @@ describe("Wallet service integration", () => {
     const service = new WalletService(pool);
 
     const results = await Promise.allSettled([
-      service.transfer(
-        sender1UserId,
-        recipient1UserId,
-        transferAmount,
-        "duplicate-transfer",
-      ),
-      service.transfer(
-        sender2UserId,
-        recipient2UserId,
-        transferAmount,
-        "duplicate-transfer",
-      ),
+      service.transfer({
+        senderUserId: sender1UserId,
+        recipientUserId: recipient1UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "duplicate-transfer",
+      }),
+      service.transfer({
+        senderUserId: sender2UserId,
+        recipientUserId: recipient2UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "duplicate-transfer",
+      }),
     ]);
     const fulfilled = results.filter((result) => result.status === "fulfilled");
     const rejected = results.filter((result) => result.status === "rejected");

@@ -43,12 +43,17 @@ export class WalletService {
     );
   }
 
-  async transfer(
-    senderUserId: number,
-    recipientUserId: number,
-    amountMinor: number,
-    idempotencyKey: string,
-  ) {
+  async transfer({
+    senderUserId,
+    recipientUserId,
+    amountMinor,
+    idempotencyKey,
+  }: {
+    senderUserId: number;
+    recipientUserId: number;
+    amountMinor: number;
+    idempotencyKey: string;
+  }) {
     if (idempotencyKey.trim().length === 0)
       throw new Error("Idempotency key must be a non-empty string");
 
