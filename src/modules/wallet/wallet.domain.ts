@@ -1,3 +1,5 @@
+import { InsufficientFundsError } from "../../errors/insufficient-funds-error.js";
+
 export class Wallet {
   readonly #balanceMinor: number;
 
@@ -29,7 +31,8 @@ export class Wallet {
 
   debit(amountMinor: number): Wallet {
     const amount = this.#validateTransactionAmount(amountMinor);
-    if (this.#balanceMinor < amount) throw new Error("Balance is insufficient");
+    if (this.#balanceMinor < amount)
+      throw new InsufficientFundsError("Balance is insufficient");
     return new Wallet(this.#balanceMinor - amount);
   }
 }

@@ -1,9 +1,14 @@
 import type { Pool, PoolConnection } from "mysql2/promise";
+
+import type { IdempotencyKeysRow } from "./wallet.types.js";
+
+import { BadRequestError } from "../../errors/bad-request-error.js";
+import { ConflictError } from "../../errors/conflict-error.js";
+import { NotFoundError } from "../../errors/not-found-error.js";
+import { IdempotencyRepository } from "./idempotency.repository.js";
+import { TransactionRepository } from "./transaction.repository.js";
 import { Wallet } from "./wallet.domain.js";
 import { WalletRepository } from "./wallet.repository.js";
-import { TransactionRepository } from "./transaction.repository.js";
-import { IdempotencyRepository } from "./idempotency.repository.js";
-import type { IdempotencyKeysRow } from "./wallet.types.js";
 
 type WalletRepositoryFactory = (connection: PoolConnection) => WalletRepository;
 type TransactionRepositoryFactory = (
@@ -58,7 +63,7 @@ export class WalletService {
       throw new Error("Idempotency key must be a non-empty string");
 
     if (senderUserId === recipientUserId)
-      throw new Error("sender and recipient cannot be the same");
+      throw new BadRequestError("sender and recipient cannot be the same");
 
     if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0)
       throw new Error("amount must be a positive integer number");
@@ -81,10 +86,10 @@ export class WalletService {
 
       const recipientRow = firstUserId === recipientUserId ? firstRow : secondRow;
 
-      if (!senderRow) throw new Error("sender wallet not found");
-      if (!recipientRow) throw new Error("recipient wallet not found");
+      if (!senderRow) throw new NotFoundError("sender wallet not found");
+      if (!recipientRow) throw new NotFoundError("recipient wallet not found");
       if (senderRow.currency !== recipientRow.currency)
-        throw new Error(
+        throw new ConflictError(
           "A transfer can only move money between wallets of the same currency.",
         );
 
@@ -126,7 +131,9 @@ export class WalletService {
               return;
             }
 
-            throw new Error("idempotency key was already used for a different request");
+            throw new ConflictError(
+              "idempotency key was already used for a different request",
+            );
           }
 
           throw err;
@@ -147,7 +154,9 @@ export class WalletService {
           return;
         }
 
-        throw new Error("idempotency key was already used for a different request");
+        throw new ConflictError(
+          "idempotency key was already used for a different request",
+        );
       }
 
       const senderWallet = new Wallet(senderRow.balance_minor);

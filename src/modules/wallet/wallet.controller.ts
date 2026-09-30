@@ -1,4 +1,5 @@
 import { Router } from "express";
+
 import { WalletService } from "./wallet.service.js";
 
 type WalletTransferService = Pick<WalletService, "transfer">;
@@ -10,34 +11,30 @@ export const createWalletRouter = (walletService: WalletTransferService) => {
       const idempotencyKey = req.get("Idempotency-Key");
       if (!idempotencyKey)
         return res.status(400).json({
-          error: {
-            code: "MISSING_IDEMPOTENCY_KEY",
-            message: "Idempotency-Key header is required",
-          },
+          code: "MISSING_IDEMPOTENCY_KEY",
+          message: "Idempotency-Key header is required",
         });
 
       const { senderUserId, recipientUserId, amountMinor } = req.body;
+
       if (!Number.isSafeInteger(senderUserId) || senderUserId <= 0) {
         return res.status(400).json({
-          error: {
-            message: "senderUserId must be a positive, safe integer",
-          },
+          code: "BAD_REQUEST",
+          message: "senderUserId must be a positive, safe integer",
         });
       }
 
       if (!Number.isSafeInteger(recipientUserId) || recipientUserId <= 0) {
         return res.status(400).json({
-          error: {
-            message: "recipientUserId must be a positive, safe integer",
-          },
+          code: "BAD_REQUEST",
+          message: "recipientUserId must be a positive, safe integer",
         });
       }
 
       if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) {
         return res.status(400).json({
-          error: {
-            message: "amountMinor must be a positive, safe integer",
-          },
+          code: "BAD_REQUEST",
+          message: "amountMinor must be a positive, safe integer",
         });
       }
 
