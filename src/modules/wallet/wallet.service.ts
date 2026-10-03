@@ -188,6 +188,14 @@ export class WalletService {
       );
 
       await connection.commit();
+      console.log(
+        JSON.stringify({
+          event: "transfer.committed",
+          transactionId: transactionRecord.id,
+          amount: amountMinor,
+          currency: senderRow.currency,
+        }),
+      );
     } catch (err) {
       await connection.rollback();
 

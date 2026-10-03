@@ -518,4 +518,171 @@ describe("Wallet service integration", () => {
 
     expect(rows).toHaveLength(1);
   });
+
+  it("Logs one 'transfer.committed' event when there is a new transfer", async () => {
+    const transferAmount = 50_000;
+    const senderInitBalance = 250_000;
+    const currency = "NGN";
+
+    const senderWallet = await repository.create(sender1UserId, currency);
+    const recipientWallet = await repository.create(recipient1UserId, currency);
+    createdWallets.push(senderWallet.id, recipientWallet.id);
+
+    await repository.updateBalance(senderWallet.id, senderInitBalance);
+
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const service = new WalletService(pool);
+      await service.transfer({
+        senderUserId: sender1UserId,
+        recipientUserId: recipient1UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "transfer-1",
+      });
+
+      const [rows] = await pool.execute<TransactionRow[]>(
+        `SELECT sender_wallet, recipient_wallet, amount_minor, currency, id FROM transactions WHERE sender_wallet = ? AND recipient_wallet = ?`,
+        [senderWallet.id, recipientWallet.id],
+      );
+      expect(rows).toHaveLength(1);
+      const [row] = rows;
+
+      expect(row?.sender_wallet).toEqual(senderWallet.id);
+      expect(row?.recipient_wallet).toEqual(recipientWallet.id);
+      expect(row?.amount_minor).toEqual(transferAmount);
+      expect(row?.currency).toEqual(currency);
+
+      const senderWalletAfterTransfer = await repository.findByUserId(sender1UserId);
+      const recipientWalletAfterTransfer =
+        await repository.findByUserId(recipient1UserId);
+
+      expect(senderWalletAfterTransfer?.balance_minor).toBe(
+        senderInitBalance - transferAmount,
+      );
+      expect(recipientWalletAfterTransfer?.balance_minor).toBe(transferAmount);
+
+      expect(spy).toHaveBeenCalledOnce();
+
+      const text = spy.mock.calls[0]?.[0];
+
+      if (typeof text !== "string") throw new Error("No JSON log line");
+      const entry = JSON.parse(text);
+      expect(entry.event).toBe("transfer.committed");
+
+      expect(entry.transactionId).toBe(row?.id);
+      expect(entry.amount).toBe(row?.amount_minor);
+      expect(entry.currency).toBe(row?.currency);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("Does not log a second transfer event when there are matching entries", async () => {
+    const currency = "NGN";
+    const initialBalance = 150_000;
+    const transferAmount = 2_000;
+
+    const sender1Wallet = await repository.create(sender1UserId, currency);
+    await repository.updateBalance(sender1Wallet.id, initialBalance);
+
+    const recipient1Wallet = await repository.create(recipient1UserId, currency);
+    createdWallets.push(sender1Wallet.id, recipient1Wallet.id);
+
+    const service = new WalletService(pool);
+
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await service.transfer({
+        senderUserId: sender1UserId,
+        recipientUserId: recipient1UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "duplicate-transfer",
+      });
+      await service.transfer({
+        senderUserId: sender1UserId,
+        recipientUserId: recipient1UserId,
+        amountMinor: transferAmount,
+        idempotencyKey: "duplicate-transfer",
+      });
+
+      const sender1WalletAfter = await repository.findByUserId(sender1UserId);
+      const recipient1WalletAfter = await repository.findByUserId(recipient1UserId);
+
+      expect(sender1WalletAfter?.balance_minor).toBe(initialBalance - transferAmount);
+      expect(recipient1WalletAfter?.balance_minor).toBe(transferAmount);
+
+      const [rows] = await pool.execute<TransactionRow[]>(
+        `SELECT id FROM transactions WHERE sender_wallet = ?`,
+        [sender1Wallet.id],
+      );
+      const [row] = rows;
+
+      expect(spy).toHaveBeenCalledOnce();
+      const text = spy.mock.calls[0]?.[0];
+
+      if (typeof text !== "string") throw new Error("No JSON log line");
+      const entry = JSON.parse(text);
+      expect(entry.event).toEqual("transfer.committed");
+      expect(entry.transactionId).toEqual(row?.id);
+      expect(entry.amount).toEqual(transferAmount);
+      expect(entry.currency).toEqual(sender1Wallet.currency);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("Does not log an event on a failed transfer", async () => {
+    const transferAmount = 50_000;
+    const senderBalance = 250_000;
+    const errorMsg = "simulated recipient update failure";
+    const currency = "NGN";
+
+    const senderWallet = await repository.create(sender1UserId, currency);
+    const recipient1Wallet = await repository.create(recipient1UserId, currency);
+    await repository.updateBalance(senderWallet.id, senderBalance);
+    createdWallets.push(senderWallet.id, recipient1Wallet.id);
+
+    const realUpdateBalance = WalletRepository.prototype.updateBalance;
+
+    const updateBalanceSpy = vi.spyOn(WalletRepository.prototype, "updateBalance");
+
+    updateBalanceSpy
+      .mockImplementationOnce(function (
+        this: WalletRepository,
+        walletId: number,
+        balanceMinor: number,
+      ) {
+        return realUpdateBalance.call(this, walletId, balanceMinor);
+      })
+      .mockRejectedValueOnce(new Error(errorMsg));
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const service = new WalletService(pool);
+
+    try {
+      await expect(
+        service.transfer({
+          senderUserId: sender1UserId,
+          recipientUserId: recipient1UserId,
+          amountMinor: transferAmount,
+          idempotencyKey: "transfer-1",
+        }),
+      ).rejects.toThrow(errorMsg);
+
+      expect(consoleSpy).toHaveBeenCalledTimes(0);
+      expect(updateBalanceSpy).toHaveBeenCalledTimes(2);
+
+      const sender = await repository.findByUserId(sender1UserId);
+      const recipient = await repository.findByUserId(recipient1UserId);
+
+      expect(sender?.balance_minor).toBe(senderBalance);
+      expect(recipient?.balance_minor).toBe(0);
+    } finally {
+      updateBalanceSpy.mockRestore();
+      consoleSpy.mockRestore();
+    }
+  });
 });

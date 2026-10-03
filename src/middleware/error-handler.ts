@@ -15,7 +15,13 @@ export function errorHandler(
     });
   }
 
-  console.error(err);
+  console.error(
+    JSON.stringify({
+      event: "http.error",
+      requestId: res.locals.requestId,
+      errorName: err.name,
+    }),
+  );
 
   return res.status(500).json({
     code: "INTERNAL_SERVER_ERROR",

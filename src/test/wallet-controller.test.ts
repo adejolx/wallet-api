@@ -1,20 +1,28 @@
 import express, { type Express } from "express";
 import request from "supertest";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi, type Mock } from "vitest";
 
 import { BadRequestError } from "../errors/bad-request-error.js";
 import { ConflictError } from "../errors/conflict-error.js";
 import { InsufficientFundsError } from "../errors/insufficient-funds-error.js";
 import { NotFoundError } from "../errors/not-found-error.js";
 import { errorHandler } from "../middleware/error-handler.js";
+import { requestId } from "../middleware/request-id.js";
 import { createWalletRouter } from "../modules/wallet/wallet.controller.js";
 
 describe("POST /transfer", () => {
   let app: Express;
+  let consoleLogSpy: Mock<(...data: any[]) => void>;
 
   beforeEach(() => {
     app = express();
+    app.use(requestId);
     app.use(express.json());
+    consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleLogSpy.mockRestore();
   });
 
   test("without Idempotency-Key", async () => {
@@ -252,19 +260,33 @@ describe("POST /transfer", () => {
     app.use(createWalletRouter(mockWalletService));
     app.use(errorHandler);
 
-    const response = await request(app)
-      .post("/transfers")
-      .set("Idempotency-Key", "transfer-1")
-      .send({
-        senderUserId: 1,
-        recipientUserId: 2,
-        amountMinor: 200,
-      });
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const response = await request(app)
+        .post("/transfers")
+        .set("Idempotency-Key", "transfer-1")
+        .send({
+          senderUserId: 1,
+          recipientUserId: 2,
+          amountMinor: 200,
+        });
 
-    expect(response.status).toBe(500);
-    expect(response.body).toEqual({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Something went wrong",
-    });
+      expect(spy).toHaveBeenCalledOnce();
+      const text = spy.mock.calls[0]?.[0];
+      if (typeof text !== "string") throw new Error("No JSON log line");
+      const entry = JSON.parse(text);
+      expect(entry.event).toBe("http.error");
+      expect(entry.errorName).toBe("Error");
+      expect(entry.requestId).toBeTypeOf("string");
+      expect(entry.requestId).toBe(response.get("x-request-id"));
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Something went wrong",
+      });
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
